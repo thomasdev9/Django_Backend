@@ -7,6 +7,9 @@ def upload_path(instance, filename):
 def upload_path_post(instance, filename):
     return '/'.join(['posts', filename])
 
+def upload_path_jobs(instance, filename):
+    return '/'.join(['jobs', filename])
+
 # Create your models here.
 class UserProfile(models.Model):
     firstname = models.TextField(max_length=20, blank=False, null=False)
@@ -67,6 +70,11 @@ class Post(models.Model):
 class Like(models.Model):
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
+
+class Comment(models.Model):
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    text = models.CharField(max_length=1000)
 
 class FriendList(models.Model):
     user = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='user')
@@ -130,12 +138,22 @@ class FriendRequest(models.Model):
         Accept a friend request
         Update both SENDER and RECEIVER friend list
         """
-        receiver_friend_list = FriendList.objects.get(user=self.receiver)
+        receiver_friend_list = FriendList.objects.filter(user_id=self.receiver_id)
+        sender_friend_list = FriendList.objects.filter(user_id=self.sender_id)
+        if(receiver_friend_list.exists()):
+            receiver_friend_list = receiver_friend_list[0]
+        else:
+            receiver_friend_list = FriendList.objects.create(user_id=self.receiver_id)
+
+        if(sender_friend_list.exists()):
+            sender_friend_list = sender_friend_list[0]
+        else:
+            sender_friend_list = FriendList.objects.create(user_id=self.sender_id)
+
         if receiver_friend_list:
-            receiver_friend_list.add_friend(self.sender)
-            sender_friend_list = FriendList.objects.get(user=self.sender)
+            receiver_friend_list.add_friend(self.sender_id)
             if sender_friend_list:
-                sender_friend_list.add_friend(self.receiver)
+                sender_friend_list.add_friend(self.receiver_id)
                 self.is_active = False
                 self.save()
 
@@ -154,3 +172,63 @@ class FriendRequest(models.Model):
         """
         self.is_active = False
         self.save()
+
+class Job(models.Model):
+
+    title = models.CharField(max_length=100)
+    brand = models.CharField(max_length=100)
+    location = models.CharField(max_length=100)
+    job_description = models.CharField(max_length=1000)
+    image = models.ImageField(upload_to=upload_path_jobs)
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    date = models.DateTimeField(auto_now_add=True)
+    participants = models.ManyToManyField(UserProfile, related_name='participants_list', blank=True)
+
+class ParticipantsList(models.Model):
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name='job')
+    candidates = models.ManyToManyField(UserProfile, blank=True, related_name='candidates')
+
+    def is_candidate(self, seeker):
+        if seeker in self.candidates.all():
+            return True
+        else:
+            return False
+
+    def add_candidate(self, seeker):
+        if seeker not in self.candidates.all():
+            self.candidates.add(seeker)
+            self.save()
+            return True
+        else:
+            return False
+
+class PersonalData(models.Model):
+    user = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='user_profile')
+    profession = models.CharField(max_length=100)
+    professional_experience = models.CharField(max_length=2000)
+    education = models.CharField(max_length=2000)
+    skills = models.CharField(max_length=2000)
+    state_profession = models.BooleanField(default=True)
+    state_experience = models.BooleanField(default=True)
+    state_education = models.BooleanField(default=True)
+    state_skills = models.BooleanField(default=True)
+
+class Conversation(models.Model):
+    member_1 = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='member_1')
+    member_2 = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='member_2')
+
+class Message(models.Model):
+    message = models.CharField(max_length=400)
+    sender = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='sender_user')
+    receiver = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='receiver_user')
+    date = models.DateTimeField(auto_now_add=True)
+
+class MessageList(models.Model):
+    conversation = models.OneToOneField(Conversation, on_delete=models.CASCADE, related_name='conversation')
+    messages = models.ManyToManyField(Message, blank=True, related_name='messages')
+
+class Notification(models.Model):
+    text = models.CharField(max_length=400)
+    sender_note = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='sender_note')
+    receiver_note = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='receiver_note')
+    date = models.DateTimeField(auto_now_add=True)
